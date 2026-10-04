@@ -1,0 +1,18 @@
+{
+  "name": "attachment-style-test",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A self-contained static quiz page, tested with Playwright and published to GitHub Pages.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "serve": "node scripts/serve.mjs"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.63.0"
+  }
+}
