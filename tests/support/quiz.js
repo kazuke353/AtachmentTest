@@ -111,7 +111,11 @@ export async function waitForAdvanceFrom(page, n) {
     await expect(counter(page)).toHaveText(`Question ${n + 1} of ${TOTAL}`);
     return;
   }
-  const leftLastQuestion = screen(page, "result").or(counter(page).filter({ hasNotText: `Question ${TOTAL} of ${TOTAL}` }));
+  // #result is always in the DOM (only hidden), so only a visible one counts; otherwise the
+  // jump back to an earlier gap would match two elements and break strict mode.
+  const leftLastQuestion = screen(page, "result")
+    .filter({ visible: true })
+    .or(counter(page).filter({ hasNotText: `Question ${TOTAL} of ${TOTAL}` }));
   await expect(leftLastQuestion).toBeVisible();
 }
 

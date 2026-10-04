@@ -46,6 +46,28 @@ test.describe("keyboard shortcuts", () => {
     await expect(page.locator("#start")).toHaveText("Continue at question 1");
   });
 
+  test("upper-case A-D (Shift or Caps Lock) also choose by position", async ({ page }) => {
+    await startQuiz(page);
+    const keys = ["B", "Shift+KeyD", "A", "C"];
+    const picked = [];
+    for (let k = 0; k < keys.length; k++) {
+      await expect(counter(page)).toHaveText(`Question ${k + 1} of ${TOTAL}`);
+      const { order } = await readQuestion(page);
+      picked.push(order["ABCD".indexOf(keys[k].slice(-1))]);
+      await page.keyboard.press(keys[k]);
+    }
+    await expect(counter(page)).toHaveText(`Question ${keys.length + 1} of ${TOTAL}`);
+    expect((await storedState(page)).answers.slice(0, keys.length)).toEqual(picked);
+  });
+
+  test("the shortcut hint shows with a hover-capable pointer and is hidden on touch screens", async ({ page }, testInfo) => {
+    await startQuiz(page);
+    const hint = page.getByText("On a keyboard, press 1–4");
+    await expect(hint).toHaveCount(1);
+    if (testInfo.project.use.hasTouch) await expect(hint).toBeHidden();
+    else await expect(hint).toBeVisible();
+  });
+
   test("other keys, and shortcuts with Ctrl, Alt or Meta held, are ignored", async ({ page }) => {
     await startQuiz(page);
     // Answering writes the choice synchronously, so the checks below need no waiting.

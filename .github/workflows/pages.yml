@@ -11,8 +11,9 @@ on:
 permissions:
   contents: read
 
-# One run at a time per branch. A newer push cancels an older run on feature
-# branches, but never on main, so a Pages deployment is never cut off midway.
+# One run in progress per branch. On feature branches a newer push cancels the running one.
+# On main a started run is never cancelled, so a Pages deployment is never cut off midway,
+# and a newer push replaces any run still waiting, so the latest commit is the one deployed.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}

@@ -9,6 +9,7 @@ import {
   counter,
   openPage,
   option,
+  options,
   readQuestion,
   restartButton,
   retakeButton,
@@ -125,6 +126,22 @@ test.describe("persistence across reloads", () => {
     await expect(counter(page)).toHaveText(`Question 1 of ${TOTAL}`);
     await expect(option(page, "A")).toHaveAttribute("aria-pressed", "true");
   });
+
+  test("going back is remembered across a reload", async ({ page }) => {
+    await startQuiz(page);
+    await answerQuestions(page, "SAV");
+    await backButton(page).click();
+    await expect(counter(page)).toHaveText(`Question 3 of ${TOTAL}`);
+    await backButton(page).click();
+    await expect(counter(page)).toHaveText(`Question 2 of ${TOTAL}`);
+
+    // Back saves the question it lands on. Without that save the reload would resume on
+    // question 4, the last index stored while answering.
+    await page.reload();
+    await expect(screen(page, "quiz")).toBeVisible();
+    await expect(counter(page)).toHaveText(`Question 2 of ${TOTAL}`);
+    await expect(option(page, "A")).toHaveAttribute("aria-pressed", "true");
+  });
 });
 
 test.describe("starting again", () => {
@@ -143,6 +160,7 @@ test.describe("starting again", () => {
     await page.getByRole("button", { name: "Start over" }).click();
 
     await expectQuestionOneUnanswered(page);
+    await expect(page.locator("#scenario")).toBeFocused();
     expectFreshState(await storedState(page), before);
     // Nothing answered any more, so the intro is back to a plain start.
     await backButton(page).click();
@@ -200,6 +218,7 @@ test.describe("robustness against bad stored state", () => {
     "fractional index": JSON.stringify({ ...validShape(), idx: 1.5 }),
     "string index": JSON.stringify({ ...validShape(), idx: "2" }),
     "too few answers": JSON.stringify({ ...validShape(), answers: Array(TOTAL - 1).fill("S") }),
+    "too many answers": JSON.stringify({ ...validShape(), answers: Array(TOTAL + 1).fill(null) }),
     "unknown answer letter": JSON.stringify({ ...validShape(), answers: ["X", ...Array(TOTAL - 1).fill(null)] }),
     "answers not an array": JSON.stringify({ ...validShape(), answers: "SSSSSSSSSSSSSSS" }),
     "missing orders": JSON.stringify({ ...validShape(), orders: undefined }),
@@ -208,6 +227,7 @@ test.describe("robustness against bad stored state", () => {
       orders: [["S", "S", "A", "V"], ...validShape().orders.slice(1)],
     }),
     "order too short": JSON.stringify({ ...validShape(), orders: [["S", "A", "V"], ...validShape().orders.slice(1)] }),
+    "order too long": JSON.stringify({ ...validShape(), orders: [["S", "A", "V", "F", "S"], ...validShape().orders.slice(1)] }),
   };
 
   for (const [name, raw] of Object.entries(BAD)) {
@@ -224,6 +244,7 @@ test.describe("robustness against bad stored state", () => {
 
       await startButton(page).click();
       await expectQuestionOneUnanswered(page);
+      await expect(options(page)).toHaveCount(4);
       await option(page, "S").click();
       await expect(counter(page)).toHaveText(`Question 2 of ${TOTAL}`);
       const state = await storedState(page);
@@ -269,6 +290,27 @@ test.describe("robustness against bad stored state", () => {
     await expect(screen(page, "result")).toBeVisible();
     const expectedScore = [...("SAVFSA" + "S" + plan.slice(7))].filter((c) => c === "S").length;
     await expect(page.locator("#score-num")).toHaveText(String(expectedScore));
+  });
+
+  test("answering the last question with an earlier gap jumps back to the gap", async ({ page }) => {
+    await startQuiz(page);
+    const state = await storedState(page);
+    const answers = Array(TOTAL).fill("S");
+    answers[6] = null;
+    answers[14] = null;
+    await setStoredRaw(page, JSON.stringify({ ...state, screen: "quiz", idx: 14, answers }));
+    await page.reload();
+    await expect(counter(page)).toHaveText(`Question 15 of ${TOTAL}`);
+
+    await answerQuestions(page, "A", { from: 15 });
+    await expect(screen(page, "result")).toBeHidden();
+    await expect(counter(page)).toHaveText(`Question 7 of ${TOTAL}`);
+    await expect(page.locator('#options .opt[aria-pressed="true"]')).toHaveCount(0);
+    await expect(page.locator("#scenario")).toBeFocused();
+
+    await answerQuestions(page, "V" + "S".repeat(7) + "A", { from: 7 });
+    await expect(screen(page, "result")).toBeVisible();
+    await expect(page.locator("#score-num")).toHaveText("13");
   });
 
   test("a stored result with no answers at all starts from question 1", async ({ page }) => {

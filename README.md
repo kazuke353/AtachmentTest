@@ -36,13 +36,13 @@ To preview the page, run `npm run serve` and open http://127.0.0.1:4173.
 
 - The `test` job runs `npm ci`, `npx playwright install --with-deps chromium` and `npm test`. The Playwright HTML report is uploaded as the `playwright-report` artifact for 7 days, including when tests fail. To view it, download and unzip it, then run `npx playwright show-report <folder>`.
 - On `main` only, once the tests pass, the `deploy` job publishes `site/` to GitHub Pages. The site URL is shown on the run's summary page and in Settings > Pages. Pushes to other branches run the tests and stop there.
-- A new push cancels a run still in progress for the same branch, except on `main`, where runs wait their turn so a deployment is never cut off.
+- Only one run per branch is in progress at a time. On other branches, a new push cancels the run in progress. On `main`, a run that has started is never cancelled, so a deployment is never cut off. A newer push to `main` replaces any run still waiting to start, so the latest commit is the one deployed.
 
 ## One-time setup
+
+Pages must be available for the repository. On GitHub Free that means a public repository. A private one needs GitHub Pro, Team or Enterprise. If Settings > Pages offers to upgrade or to make the repository public, do one of those first, or the deploy job fails on every push to `main`. A Pages site is public even when the repository is private, unless you use private Pages on GitHub Enterprise Cloud.
 
 1. On GitHub, open the repository's Settings > Pages > Build and deployment, and set Source to "GitHub Actions".
 2. Merge this workflow into `main`. GitHub runs it on pushes to `main`, and shows the "Run workflow" button, only once the file is on the default branch.
 
 Deploys only run from `main`. If you add protection rules to the `github-pages` environment, keep `main` allowed.
-
-On GitHub Free, Pages is available only for public repositories. A private repository needs GitHub Pro, Team or Enterprise. A Pages site is publicly visible even when the repository is private, unless you use private Pages on GitHub Enterprise Cloud.

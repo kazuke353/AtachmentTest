@@ -1,5 +1,17 @@
 import { test, expect } from "./support/fixtures.js";
-import { BANDS, TOTAL, TYPES, TYPE_NAMES, bandFor, completeQuiz, countPlan, makePlan } from "./support/quiz.js";
+import {
+  BANDS,
+  TOTAL,
+  TYPES,
+  TYPE_NAMES,
+  answerQuestions,
+  bandFor,
+  completeQuiz,
+  countPlan,
+  makePlan,
+  retakeButton,
+  screen,
+} from "./support/quiz.js";
 
 const DESC = {
   A: "seeking reassurance and worrying about where you stand",
@@ -228,5 +240,15 @@ test.describe("review list", () => {
     }
     const misses = [...plan].filter((c) => c !== "S").length;
     await expect(page.locator("#review-list").getByText("Secure answer", { exact: true })).toHaveCount(misses);
+  });
+
+  test("a retake collapses the review list again", async ({ page }) => {
+    await completeQuiz(page, "S".repeat(TOTAL));
+    await page.getByText("Review your answers", { exact: true }).click();
+    await expect(page.locator("#review")).toHaveAttribute("open");
+    await retakeButton(page).click();
+    await answerQuestions(page, "A".repeat(TOTAL));
+    await expect(screen(page, "result")).toBeVisible();
+    await expect(page.locator("#review")).not.toHaveAttribute("open");
   });
 });

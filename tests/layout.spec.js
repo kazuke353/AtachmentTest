@@ -7,7 +7,9 @@ import {
   expectNoHorizontalScroll,
   luminance,
   openPage,
+  option,
   parseRgb,
+  retakeButton,
   screen,
   startButton,
   startQuiz,
@@ -39,6 +41,73 @@ for (const width of [360, 400]) {
     });
   });
 }
+
+test.describe("phone-sized touch screen", () => {
+  // The mobile project covers this too; here it also runs under the desktop project.
+  test.use({ viewport: { width: 360, height: 780 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 });
+
+  test("the page is laid out at the device width, not as a zoomed-out desktop page", async ({ page }) => {
+    await openPage(page);
+    await expectNoHorizontalScroll(page, 360);
+    expect(await page.evaluate(() => window.visualViewport.scale)).toBe(1);
+  });
+});
+
+test.describe("short screen", () => {
+  test.use({ viewport: { width: 360, height: 400 } });
+
+  test("each screen change starts at the top of the page", async ({ page }) => {
+    const scrollY = () => page.evaluate(() => window.scrollY);
+    const scrollToBottom = async () => {
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await expect.poll(scrollY, "the page is tall enough to scroll").toBeGreaterThan(0);
+    };
+
+    await openPage(page);
+    await scrollToBottom();
+    await startButton(page).click();
+    await expect(counter(page)).toHaveText(`Question 1 of ${TOTAL}`);
+    await expect.poll(scrollY, "intro -> quiz").toBe(0);
+
+    await answerQuestions(page, "S".repeat(TOTAL - 1));
+    await scrollToBottom();
+    await option(page, "A").click();
+    await expect(screen(page, "result")).toBeVisible();
+    await expect.poll(scrollY, "quiz -> result").toBe(0);
+    await expect(page.locator("#score-num")).toBeInViewport();
+
+    await scrollToBottom();
+    await retakeButton(page).click();
+    await expect(counter(page)).toHaveText(`Question 1 of ${TOTAL}`);
+    await expect.poll(scrollY, "result -> quiz").toBe(0);
+  });
+});
+
+test.describe("with motion allowed", () => {
+  // The rest of the suite runs with reduced motion, which turns the animations off.
+  test.use({ reducedMotion: "no-preference" });
+
+  test("the question fades in fully and the result bars grow to their width", async ({ page }) => {
+    await startQuiz(page);
+    await option(page, "S").click();
+    await expect(counter(page)).toHaveText(`Question 2 of ${TOTAL}`);
+    const question = page.locator("#question");
+    // The animated path really runs here.
+    expect(await question.evaluate((el) => getComputedStyle(el).animationName)).toBe("enter");
+    await expect.poll(() => question.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
+
+    await answerQuestions(page, "S".repeat(TOTAL - 1), { from: 2 });
+    await expect(screen(page, "result")).toBeVisible();
+    await expect
+      .poll(() =>
+        page.locator('#breakdown .bd-row[data-type="S"]').evaluate((row) => {
+          const bar = row.querySelector(".bd-bar").getBoundingClientRect().width;
+          return bar / row.querySelector(".bd-track").getBoundingClientRect().width;
+        }),
+      )
+      .toBeGreaterThan(0.99);
+  });
+});
 
 async function colorsOf(locator) {
   return locator.evaluate((el) => {

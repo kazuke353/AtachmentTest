@@ -4,9 +4,12 @@ import {
   TYPES,
   answerQuestions,
   backButton,
+  contrast,
   counter,
+  openPage,
   option,
   options,
+  parseRgb,
   readQuestion,
   restartButton,
   screen,
@@ -58,7 +61,34 @@ test.describe("question flow", () => {
     await expect(page.locator("#style-name")).toBeFocused();
   });
 
-  test("choosing an answer marks it pressed before moving on", async ({ page }) => {
+  test("the pause after a choice shows it pressed, ignores other input, then advances after 240ms", async ({ page }) => {
+    await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
+    await startQuiz(page);
+    // Stop the page's timers so the pause can be inspected step by step.
+    await page.clock.pauseAt(new Date("2026-01-01T00:01:00Z"));
+
+    await option(page, "V").click();
+    await expect(option(page, "V")).toHaveAttribute("aria-pressed", "true");
+    await expect(counter(page)).toHaveText(`Question 1 of ${TOTAL}`);
+
+    // Input during the pause is ignored: another option, Back, and the shortcut keys.
+    await option(page, "S").click();
+    await backButton(page).click();
+    await page.keyboard.press("2");
+    await page.keyboard.press("ArrowLeft");
+    await expect(screen(page, "quiz")).toBeVisible();
+    await expect(option(page, "S")).toHaveAttribute("aria-pressed", "false");
+    await expect(option(page, "V")).toHaveAttribute("aria-pressed", "true");
+
+    await page.clock.runFor(200);
+    await expect(counter(page)).toHaveText(`Question 1 of ${TOTAL}`);
+    await page.clock.runFor(40);
+    await expect(counter(page)).toHaveText(`Question 2 of ${TOTAL}`);
+    await expect(screen(page, "quiz")).toBeVisible();
+    expect((await storedState(page)).answers.slice(0, 2)).toEqual(["V", null]);
+  });
+
+  test("a chosen answer is still pressed, and visibly highlighted, after going back", async ({ page }) => {
     await startQuiz(page);
     await option(page, "V").click();
     await expect(counter(page)).toHaveText(`Question 2 of ${TOTAL}`);
@@ -67,6 +97,44 @@ test.describe("question flow", () => {
     await expect(counter(page)).toHaveText(`Question 1 of ${TOTAL}`);
     await expect(option(page, "V")).toHaveAttribute("aria-pressed", "true");
     for (const t of ["S", "A", "F"]) await expect(option(page, t)).toHaveAttribute("aria-pressed", "false");
+
+    // The selection is drawn, not only an attribute: it stands out from the other options and stays readable.
+    await page.mouse.move(0, 0);
+    const look = (choice) =>
+      option(page, choice).evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return { color: cs.color, background: cs.backgroundColor };
+      });
+    const picked = await look("V");
+    expect(contrast(parseRgb(picked.color), parseRgb(picked.background)), "selected option text contrast").toBeGreaterThanOrEqual(4.5);
+    for (const t of ["S", "A", "F"]) {
+      const other = await look(t);
+      expect(contrast(parseRgb(picked.background), parseRgb(other.background)), `selected V stands out from ${t}`).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  test("each question gets its own random option order, and every type can land in every position", async ({ page }) => {
+    await openPage(page);
+    const orders = [];
+    for (let run = 0; run < 4; run++) {
+      await page.evaluate(() => localStorage.clear());
+      await page.reload();
+      await startButton(page).click();
+      await expect(counter(page)).toHaveText(`Question 1 of ${TOTAL}`);
+      const state = await storedState(page);
+      expect(state.orders).toHaveLength(TOTAL);
+      // What is stored is what is shown.
+      expect((await readQuestion(page)).order).toEqual(state.orders[0]);
+      // Questions do not share one order (15 shuffles giving at most 2 distinct orders: about 2e-14).
+      expect(new Set(state.orders.map((o) => o.join(""))).size, "distinct option orders in one quiz").toBeGreaterThan(2);
+      orders.push(...state.orders);
+    }
+    // 60 shuffles: every type lands in every position (a miss by chance: 16 * (3/4)^60, about 5e-7).
+    for (const t of TYPES) {
+      for (let p = 0; p < 4; p++) {
+        expect(orders.some((o) => o[p] === t), `${t} appears at position ${p + 1}`).toBe(true);
+      }
+    }
   });
 });
 
@@ -110,6 +178,7 @@ test.describe("back button", () => {
 
     await expect(screen(page, "intro")).toBeVisible();
     await expect(screen(page, "quiz")).toBeHidden();
+    await expect(startButton(page)).toBeFocused();
     await expect(startButton(page)).toHaveText("Continue at question 1");
     await expect(page.getByRole("button", { name: "Continue at question 1" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Start over" })).toBeVisible();

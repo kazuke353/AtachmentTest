@@ -147,6 +147,7 @@ h1 {
 .opt:hover { background: var(--tint); }
 .opt[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 .opt:focus-visible { outline-offset: -6px; }
+.opt[aria-pressed="true"]:focus-visible { outline-color: var(--paper); }
 .keys-hint { margin-top: -0.5rem; }
 
 .enter { animation: enter 260ms ease-out both; }
@@ -522,6 +523,7 @@ details.review[open] summary::after { content: "\2212"; }
         state.idx = next;
         save();
         renderQuiz(true);
+        $("scenario").focus({ preventScroll: true });
       } else {
         show("result");
         $("style-name").focus({ preventScroll: true });
@@ -531,7 +533,11 @@ details.review[open] summary::after { content: "\2212"; }
 
   function back() {
     if (busy) return;
-    if (state.idx === 0) { show("intro"); return; }
+    if (state.idx === 0) {
+      show("intro");
+      $("start").focus({ preventScroll: true });
+      return;
+    }
     state.idx -= 1;
     save();
     renderQuiz(true);

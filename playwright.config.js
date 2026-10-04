@@ -10,6 +10,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: CI,
   retries: 0,
+  // For private repositories GitHub's ubuntu-latest runner has 2 vCPUs, where Playwright's default
+  // (half the CPUs) would be a single worker. The suite mostly waits, so 2 workers are safe there.
+  workers: CI ? 2 : undefined,
   reporter: CI ? [["github"], ["html", { open: "never" }]] : [["list"]],
 
   use: {
@@ -42,7 +45,9 @@ export default defineConfig({
   webServer: {
     command: "node scripts/serve.mjs",
     url: BASE_URL,
-    env: { PORT: String(PORT) },
+    // serve.mjs binds to HOST when it is set; pin it so a HOST exported in the shell cannot move
+    // the server away from the 127.0.0.1 address the readiness check and the tests use.
+    env: { PORT: String(PORT), HOST: "127.0.0.1" },
     // Never attach to a server that is already running: a parallel run on another
     // port (or a stale server) must not be tested by mistake.
     reuseExistingServer: false,
